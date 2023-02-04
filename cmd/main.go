@@ -1,14 +1,16 @@
 package main
 
 import (
+	"encoding/csv"
+	"flag"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
 
 	"vc-sim-go/models"
-	"vc-sim-go/state"
 	"vc-sim-go/simulation"
+	"vc-sim-go/state"
 
 	"github.com/joho/godotenv"
 )
@@ -71,6 +73,16 @@ func main() {
 		log.Fatal("Error loading redundancy")
 	}
 
+	flag.IntVar(&workerLimit, "wl", workerLimit, "worker limit")
+	flag.IntVar(&jobLimit, "jl", jobLimit, "job limit")
+	flag.Float64Var(&joiningRate, "jr", joiningRate, "joining rate")
+	flag.Float64Var(&secessionRate, "sr", secessionRate, "secession rate")
+	flag.Float64Var(&initialJoiningRate, "ijr", initialJoiningRate, "initial joining rate")
+	flag.IntVar(&loopCount, "lc", loopCount, "loop count")
+	flag.IntVar(&parallelismNum, "pn", parallelismNum, "parallelism num")
+	flag.IntVar(&redundancy, "r", redundancy, "redundancy")
+	flag.Parse()
+
 	log.Println(fmt.Sprintf(`
 ワーカ数: %d,
 ジョブ数: %d,
@@ -99,6 +111,7 @@ func main() {
 		parallelismNum,
 		redundancy,
 	)
+	totalCycle := 0
 	for i := 0; i < loopCount; i++ {
 		workers := getInitializedWorkers(workerLimit)
 		jobs := getInitializedJobs(jobLimit, parallelismNum)
@@ -106,7 +119,29 @@ func main() {
 		simulator.SetWorkersState()
 		simulator.SetWorkersParticipationRate()
 		cycle := simulator.Simulate()
-		fmt.Println(i, "'s cycle : ", cycle, "cycle / parallelism :", float64(cycle) / float64(parallelismNum))
-		simulator.Result.TotalCycle += cycle
+		fmt.Println(i, "'s cycle : ", cycle, "cycle / parallelism :", float64(cycle)/float64(parallelismNum))
+		totalCycle += cycle
 	}
+	result := []string{
+		strconv.Itoa(workerLimit),
+		strconv.Itoa(jobLimit),
+		strconv.FormatFloat(joiningRate, 'f', 3, 64),
+		strconv.FormatFloat(secessionRate, 'f', 3, 64),
+		strconv.FormatFloat(initialJoiningRate, 'f', 3, 64),
+		strconv.Itoa(loopCount),
+		strconv.Itoa(parallelismNum),
+		strconv.Itoa(redundancy),
+		strconv.FormatFloat(float64(totalCycle)/float64(loopCount), 'f', 3, 64),
+	}
+	fmt.Println(result)
+	f, err := os.OpenFile("result.csv", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	w := csv.NewWriter(f)
+	err = w.Write(result)
+	if err != nil {
+		log.Fatal(err)
+	}
+	w.Flush()
 }
