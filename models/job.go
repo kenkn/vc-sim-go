@@ -5,20 +5,28 @@ import (
 )
 
 type Job struct {
-	ID             int
-	GroupID        int
-	State          state.JobState
-	// TODO Worker との二重結合を解消し、親子関係をはっきりさせる
-	AssignedWorker *Worker
-	IsAssigned     bool
+	ID      int
+	State   state.JobState
+	Subjobs []*Subjob
 }
 
-func NewJob(id int, groupID int, state state.JobState, assignedWorker *Worker, isAssigned bool) *Job {
+func NewJob(id int, state state.JobState, subjobs []*Subjob) *Job {
 	return &Job{
 		ID: id,
-		GroupID: groupID,
 		State: state,
-		AssignedWorker: assignedWorker,
-		IsAssigned: isAssigned,
+		Subjobs: subjobs,
 	}
+}
+
+func (j *Job) Failed() {
+	for _, subjob := range j.Subjobs {
+		for _, aw := range subjob.AssignedWorker {
+			if aw.State == state.RunningWorkerState {
+				aw.State = state.AvailableWorkerState
+			}
+		}
+		subjob.State = state.UnallocatedSubjobState
+		subjob.AssignedWorker = make([]*Worker, 0)
+	}
+	j.State = state.UnallocatedJobState
 }

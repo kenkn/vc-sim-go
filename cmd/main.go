@@ -16,16 +16,19 @@ import (
 func getInitializedWorkers(workerCount int) []*models.Worker {
 	workers := make([]*models.Worker, workerCount)
 	for i := range workers {
-		workers[i] = models.NewWorker(i, state.UnavailableWorkerState, nil)
+		workers[i] = models.NewWorker(i, state.UnavailableWorkerState)
 	}
 	return workers
 }
 
 func getInitializedJobs(jobCount int, parallelismNum int) []*models.Job {
-	jobs := make([]*models.Job, jobCount*parallelismNum)
+	jobs := make([]*models.Job, jobCount)
 	for i := range jobs {
-		groupID := i / parallelismNum
-		jobs[i] = models.NewJob(i, groupID, state.UnallocatedJobState, nil, false)
+		subjobs := make([]*models.Subjob, parallelismNum)
+		for j := range subjobs {
+			subjobs[j] = models.NewSubjob(j, state.UnallocatedSubjobState)
+		}
+		jobs[i] = models.NewJob(i, state.UnallocatedJobState, subjobs)
 	}
 	return jobs
 }
@@ -47,9 +50,9 @@ func main() {
 	if err != nil {
 		log.Fatal("Error loading joiningRate")
 	}
-	dropoutRate, err := strconv.ParseFloat(os.Getenv("DROPOUT_RATE"), 64)
+	secessionRate, err := strconv.ParseFloat(os.Getenv("SECESSION_RATE"), 64)
 	if err != nil {
-		log.Fatal("Error loading dropoutRate")
+		log.Fatal("Error loading secessionRate")
 	}
 	initialJoiningRate, err := strconv.ParseFloat(os.Getenv("INITIAL_JOINING_RATE"), 32)
 	if err != nil {
@@ -63,6 +66,10 @@ func main() {
 	if err != nil {
 		log.Fatal("Error loading parallelismNum")
 	}
+	redundancy, err := strconv.Atoi(os.Getenv("REDUNDANCY"))
+	if err != nil {
+		log.Fatal("Error loading redundancy")
+	}
 
 	log.Println(fmt.Sprintf(`
 ワーカ数: %d,
@@ -71,25 +78,35 @@ func main() {
 離脱率: %.3f,
 初期のワーカの参加率: %.3f,
 ループ数: %d,
-並列数: %d`,
+並列数: %d,
+冗長度: %d`,
 		workerLimit,
 		jobLimit,
 		joiningRate,
-		dropoutRate,
+		secessionRate,
 		initialJoiningRate,
 		loopCount,
 		parallelismNum,
+		redundancy,
 	))
-	workers := getInitializedWorkers(workerLimit)
-	jobs := getInitializedJobs(jobLimit, parallelismNum)
-	simulator := simulation.NewSimulator(workers, jobs, parallelismNum)
-
+	config := simulation.NewConfig(
+		workerLimit,
+		jobLimit,
+		joiningRate,
+		secessionRate,
+		initialJoiningRate,
+		loopCount,
+		parallelismNum,
+		redundancy,
+	)
 	for i := 0; i < loopCount; i++ {
-		simulator.SetWorkersState(joiningRate)
-		simulator.SetWorkersParticipationRate(dropoutRate, joiningRate)
+		workers := getInitializedWorkers(workerLimit)
+		jobs := getInitializedJobs(jobLimit, parallelismNum)
+		simulator := simulation.NewSimulator(workers, jobs, *config)
+		simulator.SetWorkersState()
+		simulator.SetWorkersParticipationRate()
 		cycle := simulator.Simulate()
-		fmt.Println(i, "'s cycle : ", cycle)
+		fmt.Println(i, "'s cycle : ", cycle, "cycle / parallelism :", float64(cycle) / float64(parallelismNum))
 		simulator.Result.TotalCycle += cycle
 	}
-	fmt.Println("total cycle : ", simulator.Result.TotalCycle)
 }

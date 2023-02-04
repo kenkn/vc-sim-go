@@ -15,3 +15,11 @@ const (
 	ProcessingJobState
 	FinishedJobState
 )
+
+type SubjobState int
+
+const (
+	UnallocatedSubjobState SubjobState = iota
+	ProcessingSubjobState
+	FinishedSubjobState
+)

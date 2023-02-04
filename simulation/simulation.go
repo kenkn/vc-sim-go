@@ -13,26 +13,26 @@ type Result struct {
 }
 
 type Simulator struct {
-	Workers        []*models.Worker
-	Jobs           []*models.Job
-	ParallelismNum int
-	Result         Result
+	Workers []*models.Worker
+	Jobs    []*models.Job
+	Config  Config
+	Result  Result
 }
 
-func NewSimulator(workers []*models.Worker, jobs []*models.Job, parallelismNum int) *Simulator {
+func NewSimulator(workers []*models.Worker, jobs []*models.Job, config Config) *Simulator {
 	return &Simulator{
-		Workers:        workers,
-		Jobs:           jobs,
-		ParallelismNum: parallelismNum,
+		Workers: workers,
+		Jobs:    jobs,
+		Config:  config,
 		Result: Result{
 			TotalCycle: 0,
 		},
 	}
 }
 
-func (s *Simulator) SetWorkersState(joiningRate float64) {
+func (s *Simulator) SetWorkersState() {
 	for i := range s.Workers {
-		if float64(i) < float64(len(s.Workers))*joiningRate {
+		if float64(i) < float64(len(s.Workers))*s.Config.InitialJoiningRate {
 			s.Workers[i].State = state.AvailableWorkerState
 			continue
 		}
@@ -40,16 +40,16 @@ func (s *Simulator) SetWorkersState(joiningRate float64) {
 	}
 }
 
-func (s *Simulator) SetWorkersParticipationRate(dropoutRate float64, joiningRate float64) {
+func (s *Simulator) SetWorkersParticipationRate() {
 	for i := range s.Workers {
-		s.Workers[i].DropoutRate = dropoutRate
-		s.Workers[i].JoiningRate = joiningRate
+		s.Workers[i].SecessionRate = s.Config.SecessionRate
+		s.Workers[i].JoiningRate = s.Config.JoiningRate
 	}
 }
 
 func (s *Simulator) areAllJobsFinished() bool {
-	for i := range s.Jobs {
-		if s.Jobs[i].State != state.FinishedJobState {
+	for _, job := range s.Jobs {
+		if job.State != state.FinishedJobState {
 			return false
 		}
 	}
@@ -59,69 +59,112 @@ func (s *Simulator) areAllJobsFinished() bool {
 func (s *Simulator) Simulate() int {
 	cycle := 0
 	for !s.areAllJobsFinished() {
-		for i := 0; i < s.ParallelismNum; i++ {
-			s.assignJobs()
-			s.participationEvent()
-			s.dropoffJobs()
-		}
+		s.assignJobs()
+		s.workerSecessionEvent()
+		s.finishJobs()
+		s.workerJoinEvent()
 		cycle++
 	}
 	return cycle
 }
 
 func (s *Simulator) assignJobs() {
-	subjobNum := len(s.Jobs)
-	for i := 0; i < subjobNum; i++ {
-		if s.Jobs[i].State == state.UnallocatedJobState {
-			for j := range s.Workers {
-				if s.Workers[j].State == state.AvailableWorkerState {
-					if s.Workers[j].AssignedJob != nil || s.Jobs[i].AssignedWorker != nil {
-						log.Fatal("Worker or Job is already assigned")
+label:
+	for _, job := range s.Jobs {
+		if job.State != state.UnallocatedJobState {
+			continue
+		}
+		for _, subjob := range job.Subjobs {
+			if subjob.State != state.UnallocatedSubjobState {
+				continue
+			}
+			for i := 0; i < s.Config.Redundancy; i++ {
+				for _, worker := range s.Workers {
+					if worker.State != state.AvailableWorkerState {
+						continue
 					}
-					s.Workers[j].State = state.RunningWorkerState
-					s.Jobs[i].State = state.ProcessingJobState
-					s.Workers[j].AssignedJob = s.Jobs[i]
-					s.Jobs[i].AssignedWorker = s.Workers[j]
+					worker.State = state.RunningWorkerState
+					worker.AssignedSubjob = subjob
+					subjob.AssignedWorker = append(subjob.AssignedWorker, worker)
+					subjob.State = state.ProcessingSubjobState
 					break
 				}
 			}
+			if subjob.State == state.UnallocatedSubjobState {
+				break label
+			}
 		}
+		job.State = state.ProcessingJobState
 	}
 }
 
-func (s *Simulator) participationEvent() {
-	for i := range s.Workers {
-		if s.Workers[i].State == state.RunningWorkerState || s.Workers[i].State == state.AvailableWorkerState {
-			n, err := rand.Int(rand.Reader, big.NewInt(100))
-			if err != nil {
-				log.Fatal(err)
+func (s *Simulator) workerSecessionEvent() {
+	for _, worker := range s.Workers {
+		if worker.State == state.UnavailableWorkerState {
+			continue
+		}
+		n, err := rand.Int(rand.Reader, big.NewInt(100))
+		if err != nil {
+			log.Fatal(err)
+		}
+		if n.Int64() < int64(worker.SecessionRate*100) {
+			if worker.State != state.RunningWorkerState {
+				continue
 			}
-			if n.Int64() < int64(s.Workers[i].DropoutRate*100) {
-				err := s.Workers[i].Dropout()
-				if err != nil {
-					log.Fatal(err)
+			for i, aw := range worker.AssignedSubjob.AssignedWorker {
+				if aw.ID == worker.ID {
+					worker.AssignedSubjob.RemoveWorker(i)
+					break
 				}
 			}
-		} else if s.Workers[i].State == state.UnavailableWorkerState {
-			n, err := rand.Int(rand.Reader, big.NewInt(100))
+			err := worker.Secession()
 			if err != nil {
 				log.Fatal(err)
 			}
-			if n.Int64() < int64(s.Workers[i].JoiningRate*100) {
-				s.Workers[i].Join()
+			
+		}
+	}
+	for _, job := range s.Jobs {
+		for _, subjob := range job.Subjobs {
+			if len(subjob.AssignedWorker) == 0 && subjob.State == state.ProcessingSubjobState {
+				job.Failed()
 			}
 		}
 	}
 }
 
-func (s *Simulator) dropoffJobs() {
-	for i := range s.Workers {
-		if s.Workers[i].State == state.RunningWorkerState {
-			job := s.Workers[i].AssignedJob
-			s.Workers[i].State = state.AvailableWorkerState
-			s.Workers[i].AssignedJob.State = state.FinishedJobState
-			s.Workers[i].AssignedJob = nil
-			job.AssignedWorker = nil
+func (s *Simulator) finishJobs() {
+	for _, job := range s.Jobs {
+		if job.State != state.ProcessingJobState {
+			continue
+		}
+		for _, subjob := range job.Subjobs {
+			if subjob.State != state.ProcessingSubjobState {
+				continue
+			}
+			for _, aw := range subjob.AssignedWorker {
+				aw.State = state.AvailableWorkerState
+			}
+			subjob.State = state.FinishedSubjobState
+		}
+		job.State = state.FinishedJobState
+	}
+}
+
+func (s *Simulator) workerJoinEvent() {
+	for _, worker := range s.Workers {
+		if worker.State != state.UnavailableWorkerState {
+			continue
+		}
+		n, err := rand.Int(rand.Reader, big.NewInt(100))
+		if err != nil {
+			log.Fatal(err)
+		}
+		if n.Int64() < int64(worker.JoiningRate*100) {
+			err := worker.Join()
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 }
