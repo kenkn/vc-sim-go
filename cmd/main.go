@@ -103,6 +103,9 @@ func main() {
 		parallelismNum,
 		redundancy,
 	))
+	if (parallelismNum * redundancy) > workerLimit {
+		log.Fatal("並列数 * 冗長度 > ワーカ数")
+	}
 	config := simulation.NewConfig(
 		workerLimit,
 		jobLimit,
