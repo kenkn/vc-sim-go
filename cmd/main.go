@@ -72,6 +72,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Error loading redundancy")
 	}
+	var isWriteCSV bool
 
 	flag.IntVar(&workerLimit, "wl", workerLimit, "worker limit")
 	flag.IntVar(&jobLimit, "jl", jobLimit, "job limit")
@@ -81,6 +82,7 @@ func main() {
 	flag.IntVar(&loopCount, "lc", loopCount, "loop count")
 	flag.IntVar(&parallelismNum, "pn", parallelismNum, "parallelism num")
 	flag.IntVar(&redundancy, "r", redundancy, "redundancy")
+	flag.BoolVar(&isWriteCSV, "w", false, "write csv")
 	flag.Parse()
 
 	log.Println(fmt.Sprintf(`
@@ -122,26 +124,28 @@ func main() {
 		fmt.Println(i, "'s cycle : ", cycle, "cycle / parallelism :", float64(cycle)/float64(parallelismNum))
 		totalCycle += float64(cycle) / float64(parallelismNum)
 	}
-	result := []string{
-		strconv.Itoa(workerLimit),
-		strconv.Itoa(jobLimit),
-		strconv.FormatFloat(joiningRate, 'f', 3, 64),
-		strconv.FormatFloat(secessionRate, 'f', 3, 64),
-		strconv.FormatFloat(initialJoiningRate, 'f', 3, 64),
-		strconv.Itoa(loopCount),
-		strconv.Itoa(parallelismNum),
-		strconv.Itoa(redundancy),
-		strconv.FormatFloat(float64(totalCycle)/float64(loopCount), 'f', 3, 64),
+	if isWriteCSV == true {
+		result := []string{
+			strconv.Itoa(workerLimit),
+			strconv.Itoa(jobLimit),
+			strconv.FormatFloat(joiningRate, 'f', 3, 64),
+			strconv.FormatFloat(secessionRate, 'f', 3, 64),
+			strconv.FormatFloat(initialJoiningRate, 'f', 3, 64),
+			strconv.Itoa(loopCount),
+			strconv.Itoa(parallelismNum),
+			strconv.Itoa(redundancy),
+			strconv.FormatFloat(float64(totalCycle)/float64(loopCount), 'f', 3, 64),
+		}
+		fmt.Println(result)
+		f, err := os.OpenFile("result.csv", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+		w := csv.NewWriter(f)
+		err = w.Write(result)
+		if err != nil {
+			log.Fatal(err)
+		}
+		w.Flush()
 	}
-	fmt.Println(result)
-	f, err := os.OpenFile("result.csv", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
-	if err != nil {
-		log.Fatal(err)
-	}
-	w := csv.NewWriter(f)
-	err = w.Write(result)
-	if err != nil {
-		log.Fatal(err)
-	}
-	w.Flush()
 }
