@@ -111,7 +111,7 @@ func main() {
 		parallelismNum,
 		redundancy,
 	)
-	totalCycle := 0
+	totalCycle := 0.0
 	for i := 0; i < loopCount; i++ {
 		workers := getInitializedWorkers(workerLimit)
 		jobs := getInitializedJobs(jobLimit, parallelismNum)
@@ -120,7 +120,7 @@ func main() {
 		simulator.SetWorkersParticipationRate()
 		cycle := simulator.Simulate()
 		fmt.Println(i, "'s cycle : ", cycle, "cycle / parallelism :", float64(cycle)/float64(parallelismNum))
-		totalCycle += cycle
+		totalCycle += float64(cycle) / float64(parallelismNum)
 	}
 	result := []string{
 		strconv.Itoa(workerLimit),
