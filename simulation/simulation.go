@@ -71,12 +71,22 @@ func (s *Simulator) Simulate() int {
 	return cycle
 }
 
+func (s *Simulator) countAvailableWorker() int {
+	c := 0
+	for _, worker := range s.Workers {
+		if worker.State == state.AvailableWorkerState {
+			c++
+		}
+	}
+	return c
+}
+
 func (s *Simulator) assignJobs() {
 label:
 	for _, job := range s.Jobs {
-		// if (s.Config.ParallelismNum * s.Config.Redundancy) > s.AvailableWorkerStateCount {
-		// 	return
-		// }
+		if (s.Config.ParallelismNum * s.Config.Redundancy) > s.AvailableWorkerStateCount {
+			return
+		}
 		if job.State != state.UnallocatedJobState {
 			continue
 		}
@@ -137,7 +147,8 @@ func (s *Simulator) workerSecessionEvent() {
 	for _, job := range s.Jobs {
 		for _, subjob := range job.Subjobs {
 			if len(subjob.AssignedWorker) == 0 && subjob.State == state.ProcessingSubjobState {
-				job.Failed()
+				beAvailableCount := job.Failed()
+				s.AvailableWorkerStateCount += beAvailableCount
 			}
 		}
 	}
