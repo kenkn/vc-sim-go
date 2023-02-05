@@ -13,19 +13,21 @@ type Result struct {
 }
 
 type Simulator struct {
-	Workers               []*models.Worker
-	Jobs                  []*models.Job
-	Config                Config
-	FinishedJobStateCount int
-	Result                Result
+	Workers                   []*models.Worker
+	Jobs                      []*models.Job
+	Config                    Config
+	AvailableWorkerStateCount int
+	FinishedJobStateCount     int
+	Result                    Result
 }
 
 func NewSimulator(workers []*models.Worker, jobs []*models.Job, config Config) *Simulator {
 	return &Simulator{
-		Workers:               workers,
-		Jobs:                  jobs,
-		Config:                config,
-		FinishedJobStateCount: 0,
+		Workers:                   workers,
+		Jobs:                      jobs,
+		Config:                    config,
+		AvailableWorkerStateCount: 0,
+		FinishedJobStateCount:     0,
 		Result: Result{
 			TotalCycle: 0,
 		},
@@ -33,12 +35,13 @@ func NewSimulator(workers []*models.Worker, jobs []*models.Job, config Config) *
 }
 
 func (s *Simulator) SetWorkersState() {
-	for i := range s.Workers {
+	for i, w := range s.Workers {
 		if float64(i) < float64(len(s.Workers))*s.Config.InitialJoiningRate {
-			s.Workers[i].State = state.AvailableWorkerState
+			s.AvailableWorkerStateCount++
+			w.State = state.AvailableWorkerState
 			continue
 		}
-		s.Workers[i].State = state.UnavailableWorkerState
+		w.State = state.UnavailableWorkerState
 	}
 }
 
@@ -71,6 +74,9 @@ func (s *Simulator) Simulate() int {
 func (s *Simulator) assignJobs() {
 label:
 	for _, job := range s.Jobs {
+		// if (s.Config.ParallelismNum * s.Config.Redundancy) > s.AvailableWorkerStateCount {
+		// 	return
+		// }
 		if job.State != state.UnallocatedJobState {
 			continue
 		}
@@ -83,6 +89,7 @@ label:
 					if worker.State != state.AvailableWorkerState {
 						continue
 					}
+					s.AvailableWorkerStateCount--
 					worker.State = state.RunningWorkerState
 					worker.AssignedSubjob = subjob
 					subjob.AssignedWorker = append(subjob.AssignedWorker, worker)
@@ -117,6 +124,9 @@ func (s *Simulator) workerSecessionEvent() {
 					break
 				}
 			}
+			if worker.State == state.AvailableWorkerState {
+				s.AvailableWorkerStateCount--
+			}
 			err := worker.Secession()
 			if err != nil {
 				log.Fatal(err)
@@ -143,6 +153,7 @@ func (s *Simulator) finishJobs() {
 				continue
 			}
 			for _, aw := range subjob.AssignedWorker {
+				s.AvailableWorkerStateCount++
 				aw.State = state.AvailableWorkerState
 			}
 			subjob.State = state.FinishedSubjobState
@@ -162,6 +173,7 @@ func (s *Simulator) workerJoinEvent() {
 			log.Fatal(err)
 		}
 		if n.Int64() < int64(worker.JoiningRate*100) {
+			s.AvailableWorkerStateCount++
 			err := worker.Join()
 			if err != nil {
 				log.Fatal(err)
