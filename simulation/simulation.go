@@ -13,17 +13,19 @@ type Result struct {
 }
 
 type Simulator struct {
-	Workers []*models.Worker
-	Jobs    []*models.Job
-	Config  Config
-	Result  Result
+	Workers               []*models.Worker
+	Jobs                  []*models.Job
+	Config                Config
+	FinishedJobStateCount int
+	Result                Result
 }
 
 func NewSimulator(workers []*models.Worker, jobs []*models.Job, config Config) *Simulator {
 	return &Simulator{
-		Workers: workers,
-		Jobs:    jobs,
-		Config:  config,
+		Workers:               workers,
+		Jobs:                  jobs,
+		Config:                config,
+		FinishedJobStateCount: 0,
 		Result: Result{
 			TotalCycle: 0,
 		},
@@ -48,12 +50,10 @@ func (s *Simulator) SetWorkersParticipationRate() {
 }
 
 func (s *Simulator) areAllJobsFinished() bool {
-	for _, job := range s.Jobs {
-		if job.State != state.FinishedJobState {
-			return false
-		}
+	if s.FinishedJobStateCount == len(s.Jobs) {
+		return true
 	}
-	return true
+	return false
 }
 
 func (s *Simulator) Simulate() int {
@@ -121,7 +121,7 @@ func (s *Simulator) workerSecessionEvent() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			
+
 		}
 	}
 	for _, job := range s.Jobs {
@@ -147,6 +147,7 @@ func (s *Simulator) finishJobs() {
 			}
 			subjob.State = state.FinishedSubjobState
 		}
+		s.FinishedJobStateCount++
 		job.State = state.FinishedJobState
 	}
 }
