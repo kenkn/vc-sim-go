@@ -106,11 +106,12 @@ func main() {
 	if (parallelismNum * redundancy) > workerLimit {
 		log.Fatal("並列数 * 冗長度 > ワーカ数")
 	}
+	execSecessionRate := secessionRate / float64(parallelismNum)
 	config := simulation.NewConfig(
 		workerLimit,
 		jobLimit,
 		joiningRate,
-		secessionRate,
+		execSecessionRate,
 		initialJoiningRate,
 		loopCount,
 		parallelismNum,
