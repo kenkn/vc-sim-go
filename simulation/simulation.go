@@ -1,9 +1,9 @@
 package simulation
 
 import (
-	"crypto/rand"
 	"log"
-	"math/big"
+	"math/rand"
+	"time"
 	"vc-sim-go/models"
 	"vc-sim-go/state"
 )
@@ -120,11 +120,9 @@ func (s *Simulator) workerSecessionEvent() {
 		if worker.State == state.UnavailableWorkerState {
 			continue
 		}
-		n, err := rand.Int(rand.Reader, big.NewInt(100))
-		if err != nil {
-			log.Fatal(err)
-		}
-		if n.Int64() < int64(worker.SecessionRate*100) {
+		rand.Seed(time.Now().UnixNano())
+		n := rand.Intn(100)
+		if n < int(worker.SecessionRate*100) {
 			if worker.State != state.RunningWorkerState {
 				continue
 			}
@@ -179,11 +177,9 @@ func (s *Simulator) workerJoinEvent() {
 		if worker.State != state.UnavailableWorkerState {
 			continue
 		}
-		n, err := rand.Int(rand.Reader, big.NewInt(100))
-		if err != nil {
-			log.Fatal(err)
-		}
-		if n.Int64() < int64(worker.JoiningRate*100) {
+		rand.Seed(time.Now().UnixNano())
+		n := rand.Intn(100)
+		if n < int(worker.JoiningRate*100) {
 			s.AvailableWorkerStateCount++
 			err := worker.Join()
 			if err != nil {
