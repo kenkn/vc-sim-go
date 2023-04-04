@@ -53,10 +53,7 @@ func (s *Simulator) SetWorkersParticipationRate() {
 }
 
 func (s *Simulator) areAllJobsFinished() bool {
-	if s.FinishedJobStateCount == len(s.Jobs) {
-		return true
-	}
-	return false
+	return s.FinishedJobStateCount == len(s.Jobs)
 }
 
 func (s *Simulator) Simulate() int {
